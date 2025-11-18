@@ -1,0 +1,23 @@
+{
+  "name": "cdn-proxy-server",
+  "version": "1.0.0",
+  "description": "Self-hosted CDN proxy server migrated from Cloudflare Workers",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "keywords": [
+    "cdn",
+    "proxy",
+    "cloudflare",
+    "s3",
+    "cache"
+  ],
+  "author": "",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

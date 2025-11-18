@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  cdn-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cdn-proxy-server
+    ports:
+      - "8080:8080"
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - HOST=0.0.0.0
+      # Cloudflare API credentials (set these in .env file)
+      - CF_ZONE_ID=${CF_ZONE_ID}
+      - CF_API_TOKEN=${CF_API_TOKEN}
+      - CF_PURGE_TOKEN=${CF_PURGE_TOKEN}
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - cdn-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8080/', (r) => process.exit(r.statusCode === 200 || r.statusCode === 301 ? 0 : 1))"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  cdn-network:
+    driver: bridge
