@@ -117,6 +117,12 @@ const MIME_TYPES = {
     const ext = pathname.toLowerCase().match(/\.[^.]+$/)?.[0];
     return ext ? MIME_TYPES[ext] : null;
   }
+
+  // Check if the request is for a font file
+  function isFontRequest(pathname) {
+    const ext = pathname.toLowerCase().match(/\.[^.]+$/)?.[0];
+    return ext && ['.woff', '.woff2', '.ttf', '.otf', '.eot'].includes(ext);
+  }
   
   // ---------- Headers that break Cloudflare single-file purge ----------
   // These headers prevent single-file purge from working:
@@ -240,8 +246,14 @@ const MIME_TYPES = {
       // --- (1.25) Handle CORS preflight requests ---
       if (req.method === "OPTIONS") {
         const corsHeaders = new Headers();
-        // Allow if: 1) origin is allowed, OR 2) safe no-cors request
-        if (origin && isOriginAllowed(origin, allowed)) {
+        // Allow if: 1) font file, OR 2) origin is allowed, OR 3) safe no-cors request
+        if (isFontRequest(url.pathname)) {
+          // Fonts always allowed for cross-origin CSS @font-face
+          corsHeaders.set("Access-Control-Allow-Origin", "*");
+          corsHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+          corsHeaders.set("Access-Control-Allow-Headers", "Content-Type, Range");
+          corsHeaders.set("Access-Control-Max-Age", "86400");
+        } else if (origin && isOriginAllowed(origin, allowed)) {
           // For actual CORS requests, echo the allowed origin
           corsHeaders.set("Access-Control-Allow-Origin", origin);
           corsHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -325,7 +337,13 @@ const MIME_TYPES = {
 
       // Set CORS headers for allowed origins or safe no-cors requests
       // Safe no-cors requests: <img>, <video>, <link>, <script> (null origin)
-      if (origin && isOriginAllowed(origin, allowed)) {
+      if (isFontRequest(url.pathname)) {
+        // Fonts always need CORS headers for cross-origin CSS @font-face
+        // Use wildcard for public CDN fonts
+        headers.set("Access-Control-Allow-Origin", "*");
+        headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+        headers.set("Access-Control-Allow-Headers", "Content-Type, Range");
+      } else if (origin && isOriginAllowed(origin, allowed)) {
         // For explicit CORS requests with allowed origin, echo the origin
         headers.set("Access-Control-Allow-Origin", origin);
         headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
