@@ -168,7 +168,8 @@ const MIME_TYPES = {
 
     const urlObj = new URL(url);
     const host = urlObj.hostname;
-    const canonicalUri = encodeURI(urlObj.pathname).replace(/%2F/g, '/');
+    // AWS Signature V4 requires proper URI encoding: encode each segment, keep slashes unencoded
+    const canonicalUri = urlObj.pathname.split('/').map(encodeURIComponent).join('/');
     const canonicalQuerystring = urlObj.search.substring(1);
 
     // Create canonical headers
@@ -245,7 +246,9 @@ const MIME_TYPES = {
   
       // --- (2) Build S3 target URL ---
       // Use secure configuration from imported secrets file
-      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${url.pathname}${url.search}`;
+      // Properly encode pathname segments to handle spaces and special characters
+      const encodedPathname = url.pathname.split('/').map(encodeURIComponent).join('/');
+      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${encodedPathname}${url.search}`;
   
       // --- (3) Forward request, filtering problematic headers ---
       const newHeaders = new Headers();
