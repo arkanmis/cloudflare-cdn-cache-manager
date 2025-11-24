@@ -123,6 +123,15 @@ const MIME_TYPES = {
     const ext = pathname.toLowerCase().match(/\.[^.]+$/)?.[0];
     return ext && ['.woff', '.woff2', '.ttf', '.otf', '.eot'].includes(ext);
   }
+
+  // Check if the request is for a media file (video/audio)
+  function isMediaRequest(pathname) {
+    const ext = pathname.toLowerCase().match(/\.[^.]+$/)?.[0];
+    return ext && [
+      '.mp4', '.webm', '.ogg', '.avi', '.mov', '.mkv', '.m4v', '.flv', '.wmv', '.mpg', '.mpeg', '.3gp', '.mpd',
+      '.mp3', '.wav', '.m4a', '.aac', '.flac', '.opus', '.weba', '.oga'
+    ].includes(ext);
+  }
   
   // ---------- Headers that break Cloudflare single-file purge ----------
   // These headers prevent single-file purge from working:
@@ -246,9 +255,9 @@ const MIME_TYPES = {
       // --- (1.25) Handle CORS preflight requests ---
       if (req.method === "OPTIONS") {
         const corsHeaders = new Headers();
-        // Allow if: 1) font file, OR 2) origin is allowed, OR 3) safe no-cors request
-        if (isFontRequest(url.pathname)) {
-          // Fonts always allowed for cross-origin CSS @font-face
+        // Allow if: 1) font/media file, OR 2) origin is allowed, OR 3) safe no-cors request
+        if (isFontRequest(url.pathname) || isMediaRequest(url.pathname)) {
+          // Fonts and media always allowed for cross-origin access
           corsHeaders.set("Access-Control-Allow-Origin", "*");
           corsHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
           corsHeaders.set("Access-Control-Allow-Headers", "Content-Type, Range");
@@ -337,9 +346,9 @@ const MIME_TYPES = {
 
       // Set CORS headers for allowed origins or safe no-cors requests
       // Safe no-cors requests: <img>, <video>, <link>, <script> (null origin)
-      if (isFontRequest(url.pathname)) {
-        // Fonts always need CORS headers for cross-origin CSS @font-face
-        // Use wildcard for public CDN fonts
+      if (isFontRequest(url.pathname) || isMediaRequest(url.pathname)) {
+        // Fonts and media always need CORS headers for cross-origin access
+        // Use wildcard for public CDN resources (required for range requests/streaming)
         headers.set("Access-Control-Allow-Origin", "*");
         headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
         headers.set("Access-Control-Allow-Headers", "Content-Type, Range");
