@@ -15,6 +15,8 @@ const env = {
   CF_ZONE_ID: process.env.CF_ZONE_ID,
   CF_API_TOKEN: process.env.CF_API_TOKEN,
   CF_PURGE_TOKEN: process.env.CF_PURGE_TOKEN,
+  DISABLE_HTTPS_REDIRECT: process.env.DISABLE_HTTPS_REDIRECT,
+  ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
 };
 
 // Context object (minimal implementation)
@@ -133,6 +135,8 @@ server.listen(PORT, HOST, () => {
   console.log(`  - CF_ZONE_ID: ${env.CF_ZONE_ID ? '✓ Set' : '✗ Not set'}`);
   console.log(`  - CF_API_TOKEN: ${env.CF_API_TOKEN ? '✓ Set' : '✗ Not set'}`);
   console.log(`  - CF_PURGE_TOKEN: ${env.CF_PURGE_TOKEN ? '✓ Set' : '✗ Not set'}`);
+  console.log(`  - ALLOWED_ORIGINS: ${env.ALLOWED_ORIGINS ? '✓ Set' : '✗ Not set (using defaults)'}`);
+  console.log(`  - HTTPS Redirect: ${env.DISABLE_HTTPS_REDIRECT ? '✗ Disabled' : '✓ Enabled'}`);
 });
 
 // Graceful shutdown

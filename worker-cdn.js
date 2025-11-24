@@ -1,22 +1,23 @@
+// ---------- Node.js Compatibility ----------
+// Import crypto for Node.js environment (Cloudflare Workers has it globally)
+import { webcrypto } from 'crypto';
+const crypto = globalThis.crypto || webcrypto;
+
 // ---------- S3 Configuration ----------
 // Import S3 credentials from secure configuration file
 import s3Config from './secret/aws-s3.json' with { type: 'json' };
 
 // ---------- Allowed CORS origins ----------
 // Matches root domain and all subdomains (e.g., mydomain.com, *.mydomain.com)
-const allowed = [
-  /(^|\.)pahamify\.com$/,
-  /(^|\.)pahamify\.co\.id$/,
-  /(^|\.)skillify\.id$/,
-  /(^|\.)mipi\.ai$/
-];
+// Default fallback domains (used if ALLOWED_ORIGINS env is not set)
+const defaultAllowed = [];
 
-function isOriginAllowed(origin) {
+function isOriginAllowed(origin, allowedDomains) {
   if (!origin) return false;
   try {
     const url = new URL(origin);
     const hostname = url.hostname;
-    return allowed.some(pattern => pattern.test(hostname));
+    return allowedDomains.some(pattern => pattern.test(hostname));
   } catch {
     return false;
   }
@@ -168,8 +169,8 @@ const MIME_TYPES = {
 
     const urlObj = new URL(url);
     const host = urlObj.hostname;
-    // AWS Signature V4 requires proper URI encoding: encode each segment, keep slashes unencoded
-    const canonicalUri = urlObj.pathname.split('/').map(encodeURIComponent).join('/');
+    // AWS Signature V4: use pathname as-is since it's already percent-encoded
+    const canonicalUri = urlObj.pathname;
     const canonicalQuerystring = urlObj.search.substring(1);
 
     // Create canonical headers
@@ -213,8 +214,25 @@ const MIME_TYPES = {
       const url = new URL(req.url);
       const origin = req.headers.get("Origin");
 
+      // Parse allowed origins from environment or use defaults
+      let allowed = defaultAllowed;
+      if (env.ALLOWED_ORIGINS) {
+        try {
+          // Parse comma-separated domains and convert to regex patterns
+          const domains = env.ALLOWED_ORIGINS.split(',').map(d => d.trim()).filter(d => d);
+          allowed = domains.map(domain => {
+            // Escape dots and create regex pattern for domain and subdomains
+            const escapedDomain = domain.replace(/\./g, '\\.');
+            return new RegExp(`(^|\\.)${escapedDomain}$`);
+          });
+        } catch (error) {
+          console.error('Failed to parse ALLOWED_ORIGINS, using defaults:', error);
+        }
+      }
+
       // --- (1) Force HTTPS redirect ---
-      if (url.protocol === "http:") {
+      // Skip redirect in local development mode
+      if (url.protocol === "http:" && !env.DISABLE_HTTPS_REDIRECT) {
         url.protocol = "https:";
         return Response.redirect(url.toString(), 301);
       }
@@ -223,7 +241,7 @@ const MIME_TYPES = {
       if (req.method === "OPTIONS") {
         const corsHeaders = new Headers();
         // Allow if: 1) origin is allowed, OR 2) safe no-cors request
-        if (origin && isOriginAllowed(origin)) {
+        if (origin && isOriginAllowed(origin, allowed)) {
           // For actual CORS requests, echo the allowed origin
           corsHeaders.set("Access-Control-Allow-Origin", origin);
           corsHeaders.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
@@ -246,9 +264,8 @@ const MIME_TYPES = {
   
       // --- (2) Build S3 target URL ---
       // Use secure configuration from imported secrets file
-      // Properly encode pathname segments to handle spaces and special characters
-      const encodedPathname = url.pathname.split('/').map(encodeURIComponent).join('/');
-      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${encodedPathname}${url.search}`;
+      // url.pathname is already percent-encoded by the URL constructor, use it directly
+      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${url.pathname}${url.search}`;
   
       // --- (3) Forward request, filtering problematic headers ---
       const newHeaders = new Headers();
@@ -308,7 +325,7 @@ const MIME_TYPES = {
 
       // Set CORS headers for allowed origins or safe no-cors requests
       // Safe no-cors requests: <img>, <video>, <link>, <script> (null origin)
-      if (origin && isOriginAllowed(origin)) {
+      if (origin && isOriginAllowed(origin, allowed)) {
         // For explicit CORS requests with allowed origin, echo the origin
         headers.set("Access-Control-Allow-Origin", origin);
         headers.set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
