@@ -170,6 +170,46 @@ const MIME_TYPES = {
       .join('');
   }
 
+  // S3-compatible path encoding per AWS Signature V4 requirements
+  // AWS requires: encode all characters except A-Z, a-z, 0-9, -, _, ., ~, /
+  // Spaces must be %20 (not +), and / must NOT be encoded
+  function encodeS3Path(pathname) {
+    // First decode to normalize (handles both encoded and unencoded input)
+    let decoded;
+    try {
+      decoded = decodeURIComponent(pathname);
+    } catch {
+      // If decoding fails, use as-is
+      decoded = pathname;
+    }
+
+    // Custom encoding that matches S3 expectations
+    let encoded = '';
+    for (let i = 0; i < decoded.length; i++) {
+      const char = decoded[i];
+      const code = decoded.charCodeAt(i);
+
+      // Don't encode: A-Z, a-z, 0-9, -, _, ., ~, /
+      if (
+        (code >= 0x41 && code <= 0x5A) || // A-Z
+        (code >= 0x61 && code <= 0x7A) || // a-z
+        (code >= 0x30 && code <= 0x39) || // 0-9
+        code === 0x2D || // -
+        code === 0x5F || // _
+        code === 0x2E || // .
+        code === 0x7E || // ~
+        code === 0x2F    // /
+      ) {
+        encoded += char;
+      } else {
+        // Encode everything else as %XX
+        const hex = code.toString(16).toUpperCase().padStart(2, '0');
+        encoded += '%' + hex;
+      }
+    }
+    return encoded;
+  }
+
   async function getSignatureKey(key, dateStamp, regionName, serviceName) {
     const kDate = await hmacSha256('AWS4' + key, dateStamp);
     const kRegion = await hmacSha256(kDate, regionName);
@@ -184,7 +224,7 @@ const MIME_TYPES = {
 
     const urlObj = new URL(url);
     const host = urlObj.hostname;
-    // AWS Signature V4: use pathname as-is since it's already percent-encoded
+    // AWS Signature V4: pathname from URL is properly percent-encoded by encodeS3Path()
     const canonicalUri = urlObj.pathname;
     const canonicalQuerystring = urlObj.search.substring(1);
 
@@ -285,8 +325,9 @@ const MIME_TYPES = {
   
       // --- (2) Build S3 target URL ---
       // Use secure configuration from imported secrets file
-      // url.pathname is already percent-encoded by the URL constructor, use it directly
-      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${url.pathname}${url.search}`;
+      // Properly encode pathname to handle spaces and special characters
+      const encodedPathname = encodeS3Path(url.pathname);
+      const s3Url = `https://${s3Config.bucket}.${s3Config.endpoint}${encodedPathname}${url.search}`;
   
       // --- (3) Forward request, filtering problematic headers ---
       const newHeaders = new Headers();
